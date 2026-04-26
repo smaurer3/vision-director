@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vision Mixer Brain</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon">⬡</span>
+                    <span class="logo-text">VISION MIXER <span class="logo-sub">BRAIN</span></span>
+                </div>
+            </div>
+            <div class="header-center">
+                <nav class="nav">
+                    <button class="nav-btn active" data-tab="monitor">Monitor</button>
+                    <button class="nav-btn" data-tab="channels">DSP Channels</button>
+                    <button class="nav-btn" data-tab="logic">Logic</button>
+                    <button class="nav-btn" data-tab="settings">Settings</button>
+                </nav>
+            </div>
+            <div class="header-right">
+                <div class="status-cluster">
+                    <div class="status-item">
+                        <span class="status-dot" id="mqtt-dot"></span>
+                        <span class="status-label">MQTT</span>
+                    </div>
+                    <div class="divider-v"></div>
+                    <button class="engine-btn" id="engine-btn">
+                        <span class="engine-icon" id="engine-icon">▶</span>
+                        <span id="engine-label">ENGINE</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="main">
+
+            <!-- MONITOR TAB -->
+            <div class="tab-content active" id="tab-monitor">
+                <div class="monitor-grid">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Gate States</h2>
+                            <span class="panel-sub">Live DSP channel activity</span>
+                        </div>
+                        <div class="gate-grid" id="gate-grid">
+                            <div class="empty-state">No DSP channels configured</div>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Pending Triggers</h2>
+                            <span class="panel-sub">Rules waiting to fire</span>
+                        </div>
+                        <div class="pending-list" id="pending-list">
+                            <div class="empty-state">No pending triggers</div>
+                        </div>
+                    </div>
+                    <div class="panel panel-wide">
+                        <div class="panel-header">
+                            <h2>Switch Log</h2>
+                            <span class="panel-sub">Recent camera switch events</span>
+                            <button class="btn-ghost btn-sm" onclick="clearLog()">Clear</button>
+                        </div>
+                        <div class="log-list" id="log-list">
+                            <div class="empty-state">No switches fired yet</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DSP CHANNELS TAB -->
+            <div class="tab-content" id="tab-channels">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>DSP Channels</h2>
+                        <span class="panel-sub">Configure ClearOne gate inputs</span>
+                        <button class="btn-primary btn-sm" onclick="openChannelModal()">+ Add Channel</button>
+                    </div>
+                    <table class="data-table" id="channels-table">
+                        <thead>
+                            <tr>
+                                <th>Variable Name</th>
+                                <th>Device ID</th>
+                                <th>Channel</th>
+                                <th>GHOLD</th>
+                                <th>+ Hold (s)</th>
+                                <th>Total Delay</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="channels-tbody">
+                            <tr><td colspan="7" class="empty-state">No channels configured</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- LOGIC TAB -->
+            <div class="tab-content" id="tab-logic">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Logic Rules</h2>
+                        <span class="panel-sub">Define camera switching behaviour</span>
+                        <button class="btn-primary btn-sm" onclick="openRuleModal()">+ Add Rule</button>
+                    </div>
+                    <div class="rules-list" id="rules-list">
+                        <div class="empty-state">No rules configured</div>
+                    </div>
+                </div>
+                <div class="panel mt-16">
+                    <div class="panel-header">
+                        <h2>Expression Reference</h2>
+                        <span class="panel-sub">Available operators and variables</span>
+                    </div>
+                    <div class="reference-grid">
+                        <div class="ref-group">
+                            <div class="ref-title">Operators</div>
+                            <code>&amp;&amp;</code> AND &nbsp;
+                            <code>||</code> OR &nbsp;
+                            <code>!</code> NOT &nbsp;
+                            <code>==</code> EQUALS &nbsp;
+                            <code>!=</code> NOT EQUALS
+                        </div>
+                        <div class="ref-group">
+                            <div class="ref-title">Example Expressions</div>
+                            <code>(audience1 || audience2) &amp;&amp; !lectern</code><br>
+                            <code>song_leader &amp;&amp; !roving</code><br>
+                            <code>lectern == 1</code>
+                        </div>
+                        <div class="ref-group">
+                            <div class="ref-title">Configured Variables</div>
+                            <div id="var-list" class="var-list">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS TAB -->
+            <div class="tab-content" id="tab-settings">
+                <div class="panel settings-panel">
+                    <div class="panel-header">
+                        <h2>MQTT Broker</h2>
+                        <span class="panel-sub">All communication via single broker</span>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Broker Host</label>
+                            <input type="text" id="s-mqtt-host" placeholder="192.168.1.1">
+                        </div>
+                        <div class="form-group">
+                            <label>Port</label>
+                            <input type="number" id="s-mqtt-port" placeholder="1883">
+                        </div>
+                        <div class="form-group">
+                            <label>Username <span class="optional">optional</span></label>
+                            <input type="text" id="s-mqtt-user" placeholder="username">
+                        </div>
+                        <div class="form-group">
+                            <label>Password <span class="optional">optional</span></label>
+                            <input type="password" id="s-mqtt-pass" placeholder="••••••••">
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="panel-header">
+                        <h2>Camera Output</h2>
+                        <span class="panel-sub">MQTT topic for camera switch commands</span>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group form-group-wide">
+                            <label>Camera Switch Topic</label>
+                            <input type="text" id="s-camera-topic" placeholder="camera/switch">
+                            <span class="hint">Payload will be the camera input number</span>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" onclick="saveSettings()">Save &amp; Reconnect</button>
+                        <span class="save-status" id="save-status"></span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- CHANNEL MODAL -->
+    <div class="modal-overlay" id="channel-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="channel-modal-title">Add DSP Channel</h3>
+                <button class="modal-close" onclick="closeChannelModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="ch-id">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Device ID</label>
+                        <input type="text" id="ch-device" placeholder="e.g. 10 or H2" oninput="onChannelFieldChange()">
+                    </div>
+                    <div class="form-group">
+                        <label>Mic Channel</label>
+                        <input type="number" id="ch-channel" placeholder="1-8" min="1" max="8" oninput="onChannelFieldChange()">
+                    </div>
+                    <div class="form-group form-group-wide">
+                        <label>Variable Name</label>
+                        <input type="text" id="ch-name" placeholder="e.g. lectern_mic">
+                        <span class="hint">Use in logic expressions — no spaces</span>
+                    </div>
+                    <div class="form-group">
+                        <label>Additional Hold Time (s)</label>
+                        <input type="number" id="ch-hold" placeholder="0.5" step="0.1" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>GHOLD from DSP</label>
+                        <div class="ghold-display">
+                            <span id="ch-ghold-val">—</span>
+                            <span class="ghold-unit">s</span>
+                            <span class="ghold-status" id="ch-ghold-status"></span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Total Delay</label>
+                        <div class="ghold-display total">
+                            <span id="ch-total-delay">—</span>
+                            <span class="ghold-unit">s</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-ghost" onclick="closeChannelModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveChannel()">Save Channel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RULE MODAL -->
+    <div class="modal-overlay" id="rule-modal">
+        <div class="modal modal-wide">
+            <div class="modal-header">
+                <h3 id="rule-modal-title">Add Logic Rule</h3>
+                <button class="modal-close" onclick="closeRuleModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="rule-id">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Rule Name</label>
+                        <input type="text" id="rule-name" placeholder="e.g. Wide Shot">
+                    </div>
+                    <div class="form-group">
+                        <label>Camera Input</label>
+                        <input type="number" id="rule-camera" placeholder="1" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <input type="number" id="rule-priority" placeholder="0" min="0">
+                        <span class="hint">Higher = evaluated first</span>
+                    </div>
+                    <div class="form-group">
+                        <label>Trigger On</label>
+                        <select id="rule-trigger-on">
+                            <option value="rising">Rising edge only (gate ON)</option>
+                            <option value="any">Any change</option>
+                        </select>
+                        <span class="hint">Rising recommended for camera switching</span>
+                    </div>
+                    <div class="form-group form-group-wide">
+                        <label>Trigger Expression</label>
+                        <input type="text" id="rule-trigger" placeholder="(audience1 || audience2) && !lectern_mic" class="expr-input">
+                        <span class="hint">Gate states that initiate the switch timer</span>
+                    </div>
+                    <div class="form-group form-group-wide">
+                        <label>Condition Expression <span class="optional">optional</span></label>
+                        <input type="text" id="rule-condition" placeholder="!lectern_mic" class="expr-input">
+                        <span class="hint">Re-evaluated after delay — switch only fires if true</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-ghost" onclick="closeRuleModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveRule()">Save Rule</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
