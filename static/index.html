@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vision Mixer Brain</title>
+    <title>Vision Director</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
             <div class="header-left">
                 <div class="logo">
                     <span class="logo-icon">⬡</span>
-                    <span class="logo-text">VISION MIXER <span class="logo-sub">BRAIN</span></span>
+                    <span class="logo-text">VISION <span class="logo-sub">DIRECTOR</span></span>
                 </div>
             </div>
             <div class="header-center">
@@ -49,6 +49,7 @@
                         <div class="panel-header">
                             <h2>Gate States</h2>
                             <span class="panel-sub">Live DSP channel activity</span>
+                            <button class="btn-ghost btn-sm" onclick="refreshGates()">↻ Refresh Gates</button>
                         </div>
                         <div class="gate-grid" id="gate-grid">
                             <div class="empty-state">No DSP channels configured</div>
@@ -179,6 +180,11 @@
                             <input type="text" id="s-camera-topic" placeholder="camera/switch">
                             <span class="hint">Payload will be the camera input number</span>
                         </div>
+                        <div class="form-group form-group-wide">
+                            <label>Control Topic Root</label>
+                            <input type="text" id="s-control-topic" placeholder="vision-director">
+                            <span class="hint">Subscribe root for engine control — e.g. vision-director/engine/set and vision-director/gates/refresh</span>
+                        </div>
                     </div>
                     <div class="form-actions">
                         <button class="btn-primary" onclick="saveSettings()">Save &amp; Reconnect</button>
@@ -264,22 +270,61 @@
                         <span class="hint">Higher = evaluated first</span>
                     </div>
                     <div class="form-group">
-                        <label>Trigger On</label>
-                        <select id="rule-trigger-on">
-                            <option value="rising">Rising edge only (gate ON)</option>
-                            <option value="any">Any change</option>
-                        </select>
-                        <span class="hint">Rising recommended for camera switching</span>
+                        <label>Mode</label>
+                        <div class="mode-toggle">
+                            <button class="mode-btn active" id="mode-simple-btn" onclick="setRuleMode('simple')">Simple</button>
+                            <button class="mode-btn" id="mode-advanced-btn" onclick="setRuleMode('advanced')">Advanced</button>
+                        </div>
+                        <input type="hidden" id="rule-mode" value="simple">
                     </div>
-                    <div class="form-group form-group-wide">
-                        <label>Trigger Expression</label>
-                        <input type="text" id="rule-trigger" placeholder="(audience1 || audience2) && !lectern_mic" class="expr-input">
-                        <span class="hint">Gate states that initiate the switch timer</span>
+                </div>
+
+                <!-- SIMPLE MODE -->
+                <div id="simple-mode-fields">
+                    <div class="modal-section-header">Triggers</div>
+                    <div class="form-grid">
+                        <div class="form-group form-group-wide">
+                            <label>Trigger Channels <span class="hint-inline">— any selected channel activates this rule</span></label>
+                            <div class="checkbox-grid" id="trigger-channels-grid"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>Edge</label>
+                            <select id="rule-trigger-edge">
+                                <option value="rising">Rising — gate turns ON</option>
+                                <option value="falling">Falling — gate turns OFF</option>
+                            </select>
+                            <span class="hint">Rising: switch TO this camera. Falling: switch AWAY.</span>
+                        </div>
                     </div>
-                    <div class="form-group form-group-wide">
-                        <label>Condition Expression <span class="optional">optional</span></label>
-                        <input type="text" id="rule-condition" placeholder="!lectern_mic" class="expr-input">
-                        <span class="hint">Re-evaluated after delay — switch only fires if true</span>
+                    <div class="modal-section-header">Blocked By</div>
+                    <div class="form-grid">
+                        <div class="form-group form-group-wide">
+                            <label>Block if any selected channel is ON <span class="hint-inline">— leave empty for no blocking</span></label>
+                            <div class="checkbox-grid" id="blocked-by-grid"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ADVANCED MODE -->
+                <div id="advanced-mode-fields" style="display:none">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Edge</label>
+                            <select id="rule-trigger-edge-adv">
+                                <option value="rising">Rising — gate turns ON</option>
+                                <option value="falling">Falling — gate turns OFF</option>
+                            </select>
+                        </div>
+                        <div class="form-group form-group-wide">
+                            <label>Trigger Expression</label>
+                            <input type="text" id="rule-trigger" placeholder="(audience1 || audience2) && !lectern_mic" class="expr-input">
+                            <span class="hint">Evaluated on edge — starts the timer</span>
+                        </div>
+                        <div class="form-group form-group-wide">
+                            <label>Condition Expression <span class="optional">optional</span></label>
+                            <input type="text" id="rule-condition" placeholder="!lectern_mic" class="expr-input">
+                            <span class="hint">Evaluated after delay — switch only fires if true</span>
+                        </div>
                     </div>
                 </div>
             </div>

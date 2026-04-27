@@ -257,6 +257,10 @@ function addLogItem(item, animate = true) {
     while (list.children.length > 50) list.removeChild(list.lastChild);
 }
 
+function refreshGates() {
+    send({ type: 'refresh_gates' });
+}
+
 function clearLog() {
     document.getElementById('log-list').innerHTML = '<div class="empty-state">No switches fired yet</div>';
 }
@@ -419,16 +423,32 @@ function renderRulesList() {
     rules.forEach(rule => {
         const card = document.createElement('div');
         card.className = 'rule-card' + (rule.enabled ? '' : ' disabled');
-        card.innerHTML = `
-            <input type="checkbox" class="rule-toggle" ${rule.enabled ? 'checked' : ''} 
-                onchange="toggleRule(${rule.id}, this.checked)">
-            <div class="rule-body">
-                <div class="rule-top">
-                    <span class="rule-name">${rule.name}</span>
-                    <span class="rule-cam-badge">CAM ${rule.camera_input}</span>
-                    <span class="rule-trigger-on-badge ${rule.trigger_on === 'rising' ? 'rising' : 'any'}">${rule.trigger_on === 'rising' ? '↑ RISING' : '↕ ANY'}</span>
-                    <span class="rule-priority">Priority ${rule.priority}</span>
+        const mode = rule.rule_mode || 'simple';
+        const edge = rule.trigger_edge || 'rising';
+        const edgeBadge = edge === 'rising'
+            ? '<span class="rule-trigger-on-badge rising">↑ RISING</span>'
+            : '<span class="rule-trigger-on-badge any">↓ FALLING</span>';
+        const modeBadge = mode === 'advanced'
+            ? '<span class="rule-trigger-on-badge any">ADV</span>'
+            : '';
+
+        let contentHtml = '';
+        if (mode === 'simple') {
+            const triggers = (rule.trigger_channels || []);
+            const blocked = (rule.blocked_by || []);
+            contentHtml = `
+                <div class="rule-simple-summary">
+                    <span class="rule-channel-chip label">triggers</span>
+                    ${triggers.length ? triggers.map(ch => `<span class="rule-channel-chip trigger">${ch}</span>`).join('') : '<span class="rule-channel-chip">none</span>'}
                 </div>
+                ${blocked.length ? `
+                <div class="rule-simple-summary">
+                    <span class="rule-channel-chip label">blocked by</span>
+                    ${blocked.map(ch => `<span class="rule-channel-chip blocked">${ch}</span>`).join('')}
+                </div>` : ''}
+            `;
+        } else {
+            contentHtml = `
                 <div class="rule-exprs">
                     <div class="rule-expr-row">
                         <span class="expr-label">Trigger</span>
@@ -440,6 +460,21 @@ function renderRulesList() {
                         <span class="expr-value">${rule.condition_expression}</span>
                     </div>` : ''}
                 </div>
+            `;
+        }
+
+        card.innerHTML = `
+            <input type="checkbox" class="rule-toggle" ${rule.enabled ? 'checked' : ''}
+                onchange="toggleRule(${rule.id}, this.checked)">
+            <div class="rule-body">
+                <div class="rule-top">
+                    <span class="rule-name">${rule.name}</span>
+                    <span class="rule-cam-badge">CAM ${rule.camera_input}</span>
+                    ${edgeBadge}
+                    ${modeBadge}
+                    <span class="rule-priority">Priority ${rule.priority}</span>
+                </div>
+                ${contentHtml}
             </div>
             <div class="rule-actions">
                 <button class="btn-edit" onclick="openRuleModal(${rule.id})">Edit</button>
@@ -458,15 +493,55 @@ function toggleRule(id, enabled) {
     }
 }
 
+function setRuleMode(mode) {
+    document.getElementById('rule-mode').value = mode;
+    document.getElementById('mode-simple-btn').classList.toggle('active', mode === 'simple');
+    document.getElementById('mode-advanced-btn').classList.toggle('active', mode === 'advanced');
+    document.getElementById('simple-mode-fields').style.display = mode === 'simple' ? '' : 'none';
+    document.getElementById('advanced-mode-fields').style.display = mode === 'advanced' ? '' : 'none';
+}
+
+function buildCheckboxGrid(containerId, selectedList) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    if (!channels.length) {
+        container.innerHTML = '<span style="color:var(--text-muted);font-size:12px">No DSP channels configured</span>';
+        return;
+    }
+    channels.forEach(ch => {
+        const checked = selectedList.includes(ch.friendly_name);
+        const item = document.createElement('label');
+        item.className = 'checkbox-item' + (checked ? ' checked' : '');
+        item.innerHTML = `
+            <input type="checkbox" value="${ch.friendly_name}" ${checked ? 'checked' : ''}>
+            <span>${ch.friendly_name}</span>
+        `;
+        item.querySelector('input').addEventListener('change', function() {
+            item.classList.toggle('checked', this.checked);
+        });
+        container.appendChild(item);
+    });
+}
+
+function getCheckedChannels(containerId) {
+    const container = document.getElementById(containerId);
+    return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+}
+
 function openRuleModal(id = null) {
     document.getElementById('rule-id').value = '';
     document.getElementById('rule-name').value = '';
     document.getElementById('rule-camera').value = '';
     document.getElementById('rule-priority').value = '0';
-    document.getElementById('rule-trigger-on').value = 'rising';
     document.getElementById('rule-trigger').value = '';
     document.getElementById('rule-condition').value = '';
+    document.getElementById('rule-trigger-edge').value = 'rising';
+    document.getElementById('rule-trigger-edge-adv').value = 'rising';
     document.getElementById('rule-modal-title').textContent = id ? 'Edit Logic Rule' : 'Add Logic Rule';
+
+    let selectedTriggers = [];
+    let selectedBlocked = [];
+    let mode = 'simple';
 
     if (id) {
         const rule = rules.find(r => r.id === id);
@@ -475,11 +550,21 @@ function openRuleModal(id = null) {
             document.getElementById('rule-name').value = rule.name;
             document.getElementById('rule-camera').value = rule.camera_input;
             document.getElementById('rule-priority').value = rule.priority;
-            document.getElementById('rule-trigger-on').value = rule.trigger_on || 'rising';
-            document.getElementById('rule-trigger').value = rule.trigger_expression;
+            document.getElementById('rule-trigger').value = rule.trigger_expression || '';
             document.getElementById('rule-condition').value = rule.condition_expression || '';
+            mode = rule.rule_mode || 'simple';
+            selectedTriggers = rule.trigger_channels || [];
+            selectedBlocked = rule.blocked_by || [];
+            const edge = rule.trigger_edge || 'rising';
+            document.getElementById('rule-trigger-edge').value = edge;
+            document.getElementById('rule-trigger-edge-adv').value = edge;
         }
     }
+
+    setRuleMode(mode);
+    buildCheckboxGrid('trigger-channels-grid', selectedTriggers);
+    buildCheckboxGrid('blocked-by-grid', selectedBlocked);
+
     document.getElementById('rule-modal').classList.add('open');
 }
 
@@ -489,18 +574,34 @@ function closeRuleModal() {
 
 function saveRule() {
     const id = document.getElementById('rule-id').value;
+    const mode = document.getElementById('rule-mode').value;
+    const edge = mode === 'simple'
+        ? document.getElementById('rule-trigger-edge').value
+        : document.getElementById('rule-trigger-edge-adv').value;
+
     const data = {
         name: document.getElementById('rule-name').value.trim(),
         camera_input: parseInt(document.getElementById('rule-camera').value),
         priority: parseInt(document.getElementById('rule-priority').value) || 0,
-        trigger_on: document.getElementById('rule-trigger-on').value,
-        trigger_expression: document.getElementById('rule-trigger').value.trim(),
-        condition_expression: document.getElementById('rule-condition').value.trim(),
+        rule_mode: mode,
+        trigger_edge: edge,
+        trigger_channels: mode === 'simple' ? getCheckedChannels('trigger-channels-grid') : [],
+        blocked_by: mode === 'simple' ? getCheckedChannels('blocked-by-grid') : [],
+        trigger_expression: mode === 'advanced' ? document.getElementById('rule-trigger').value.trim() : '',
+        condition_expression: mode === 'advanced' ? document.getElementById('rule-condition').value.trim() : '',
         enabled: 1,
     };
     if (id) data.id = parseInt(id);
-    if (!data.name || !data.camera_input || !data.trigger_expression) {
-        alert('Please fill in Name, Camera Input and Trigger Expression');
+    if (!data.name || !data.camera_input) {
+        alert('Please fill in Name and Camera Input');
+        return;
+    }
+    if (mode === 'simple' && !data.trigger_channels.length) {
+        alert('Please select at least one trigger channel');
+        return;
+    }
+    if (mode === 'advanced' && !data.trigger_expression) {
+        alert('Please enter a trigger expression');
         return;
     }
     send({ type: 'save_rule', rule: data });
@@ -535,6 +636,7 @@ function populateSettings() {
     document.getElementById('s-mqtt-user').value = settings.mqtt_user || '';
     document.getElementById('s-mqtt-pass').value = settings.mqtt_pass || '';
     document.getElementById('s-camera-topic').value = settings.camera_topic || 'camera/switch';
+    document.getElementById('s-control-topic').value = settings.control_topic || 'vision-director';
 }
 
 function saveSettings() {
@@ -544,6 +646,7 @@ function saveSettings() {
         mqtt_user: document.getElementById('s-mqtt-user').value.trim(),
         mqtt_pass: document.getElementById('s-mqtt-pass').value.trim(),
         camera_topic: document.getElementById('s-camera-topic').value.trim(),
+        control_topic: document.getElementById('s-control-topic').value.trim(),
     };
     send({ type: 'save_settings', settings: data });
 }

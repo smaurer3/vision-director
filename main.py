@@ -68,6 +68,12 @@ def on_mqtt_connect(client, userdata, flags, rc):
         client.subscribe("clearone/+/GATE/+")
         # Subscribe to GHOLD responses
         client.subscribe("clearone/+/GHOLD/+/state")
+        # Subscribe to control topics
+        settings = get_settings()
+        control_root = settings.get("control_topic", "vision-director")
+        client.subscribe(f"{control_root}/engine/set")
+        client.subscribe(f"{control_root}/gates/refresh")
+        print(f"[MQTT] Subscribed to control topics under '{control_root}'")
         asyncio.run_coroutine_threadsafe(
             manager.broadcast({"type": "mqtt_status", "connected": True}), loop
         )
@@ -80,9 +86,36 @@ def on_mqtt_disconnect(client, userdata, rc):
         manager.broadcast({"type": "mqtt_status", "connected": False}), loop
     )
 
+def mqtt_refresh_gates():
+    """Publish clearone/refresh to trigger gate status refresh in bridge"""
+    mqtt_publish("clearone/refresh", "1")
+
 def on_mqtt_message(client, userdata, msg):
     topic = msg.topic
     payload = msg.payload.decode("utf-8").strip()
+
+    # Handle control topics
+    settings = get_settings()
+    control_root = settings.get("control_topic", "vision-director")
+
+    if topic == f"{control_root}/engine/set":
+        if engine:
+            if payload.lower() in ("1", "true", "on", "start"):
+                engine.running = True
+            elif payload.lower() in ("0", "false", "off", "stop"):
+                engine.running = False
+            elif payload.lower() == "toggle":
+                engine.running = not engine.running
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast({"type": "engine_status", "running": engine.running}), loop
+            )
+            print(f"[Control] Engine {'started' if engine.running else 'stopped'} via MQTT")
+        return
+
+    if topic == f"{control_root}/gates/refresh":
+        mqtt_refresh_gates()
+        print("[Control] Gate refresh requested via MQTT")
+        return
 
     # Handle GHOLD responses: clearone/{dev}/GHOLD/{ch}/state
     parts = topic.split("/")
@@ -193,9 +226,10 @@ async def lifespan(app: FastAPI):
     # Connect MQTT
     connect_mqtt()
 
-    # Wait a moment then fetch GHOLDs
+    # Wait a moment then fetch GHOLDs and gate states
     await asyncio.sleep(2)
     fetch_all_gholds()
+    mqtt_refresh_gates()
 
     yield
 
@@ -258,6 +292,8 @@ async def handle_ws_message(ws: WebSocket, data: dict):
                 ghold_pending[pending_key] = c["id"]
                 break
         mqtt_publish(topic, " ")
+        # Also refresh gate status
+        mqtt_refresh_gates()
 
     elif msg_type == "delete_channel":
         delete_channel(data["id"])
@@ -301,6 +337,9 @@ async def handle_ws_message(ws: WebSocket, data: dict):
     elif msg_type == "engine_toggle":
         engine.running = not engine.running
         await manager.broadcast({"type": "engine_status", "running": engine.running})
+
+    elif msg_type == "refresh_gates":
+        mqtt_refresh_gates()
 
     elif msg_type == "get_log":
         await ws.send_json({"type": "switch_log", "log": engine.switch_log})

@@ -36,19 +36,29 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             camera_input INTEGER NOT NULL,
-            trigger_expression TEXT NOT NULL,
+            rule_mode TEXT DEFAULT 'simple',
+            trigger_channels TEXT DEFAULT '[]',
+            trigger_edge TEXT DEFAULT 'rising',
+            blocked_by TEXT DEFAULT '[]',
+            trigger_expression TEXT DEFAULT '',
             condition_expression TEXT DEFAULT '',
             enabled INTEGER DEFAULT 1,
-            priority INTEGER DEFAULT 0,
-            trigger_on TEXT DEFAULT 'rising'
+            priority INTEGER DEFAULT 0
         )
     """)
 
-    # Add trigger_on column if upgrading from older DB
-    try:
-        c.execute("ALTER TABLE logic_rules ADD COLUMN trigger_on TEXT DEFAULT 'rising'")
-    except:
-        pass
+    # Migrations for existing DBs
+    migrations = [
+        "ALTER TABLE logic_rules ADD COLUMN rule_mode TEXT DEFAULT 'simple'",
+        "ALTER TABLE logic_rules ADD COLUMN trigger_channels TEXT DEFAULT '[]'",
+        "ALTER TABLE logic_rules ADD COLUMN trigger_edge TEXT DEFAULT 'rising'",
+        "ALTER TABLE logic_rules ADD COLUMN blocked_by TEXT DEFAULT '[]'",
+    ]
+    for m in migrations:
+        try:
+            c.execute(m)
+        except:
+            pass
 
     # Default settings
     defaults = {
@@ -57,6 +67,7 @@ def init_db():
         "mqtt_user": "",
         "mqtt_pass": "",
         "camera_topic": "camera/switch",
+        "control_topic": "vision-director",
     }
     for key, value in defaults.items():
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
@@ -114,25 +125,37 @@ def get_rules():
     conn = get_db()
     rows = conn.execute("SELECT * FROM logic_rules ORDER BY priority DESC, name").fetchall()
     conn.close()
-    return [dict(row) for row in rows]
+    rules = []
+    for row in rows:
+        r = dict(row)
+        r["trigger_channels"] = json.loads(r.get("trigger_channels") or "[]")
+        r["blocked_by"] = json.loads(r.get("blocked_by") or "[]")
+        rules.append(r)
+    return rules
 
 def save_rule(data: dict):
     conn = get_db()
+    trigger_channels = json.dumps(data.get("trigger_channels") or [])
+    blocked_by = json.dumps(data.get("blocked_by") or [])
     if data.get("id"):
         conn.execute("""
-            UPDATE logic_rules SET name=?, camera_input=?, trigger_expression=?,
-            condition_expression=?, enabled=?, priority=?, trigger_on=?
+            UPDATE logic_rules SET name=?, camera_input=?, rule_mode=?,
+            trigger_channels=?, trigger_edge=?, blocked_by=?,
+            trigger_expression=?, condition_expression=?, enabled=?, priority=?
             WHERE id=?
-        """, (data["name"], data["camera_input"], data["trigger_expression"],
-              data.get("condition_expression", ""), data.get("enabled", 1),
-              data.get("priority", 0), data.get("trigger_on", "rising"), data["id"]))
+        """, (data["name"], data["camera_input"], data.get("rule_mode", "simple"),
+              trigger_channels, data.get("trigger_edge", "rising"), blocked_by,
+              data.get("trigger_expression", ""), data.get("condition_expression", ""),
+              data.get("enabled", 1), data.get("priority", 0), data["id"]))
     else:
         conn.execute("""
-            INSERT INTO logic_rules (name, camera_input, trigger_expression, condition_expression, enabled, priority, trigger_on)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (data["name"], data["camera_input"], data["trigger_expression"],
-              data.get("condition_expression", ""), data.get("enabled", 1),
-              data.get("priority", 0), data.get("trigger_on", "rising")))
+            INSERT INTO logic_rules (name, camera_input, rule_mode, trigger_channels,
+            trigger_edge, blocked_by, trigger_expression, condition_expression, enabled, priority)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (data["name"], data["camera_input"], data.get("rule_mode", "simple"),
+              trigger_channels, data.get("trigger_edge", "rising"), blocked_by,
+              data.get("trigger_expression", ""), data.get("condition_expression", ""),
+              data.get("enabled", 1), data.get("priority", 0)))
     conn.commit()
     conn.close()
 
