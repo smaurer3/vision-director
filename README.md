@@ -1,3 +1,11 @@
+NOTE: This is the first commit of what I intend to become a fairly comprehensive aduio gate based vision switcher controller.  The code at the moment is entirely AI generated, although wiht a lot of input from myself - this documentaion, other than this not is AI generated.  
+
+I've done this project as we have a use case for it at my church, but also wanted to see how far I could push AI generated code in 2026 - so far I'm impressed  -claude Sonnet 4.6 generated this code and I have done intial testing at it appears to work fine.  First live testing in a production environment will be happening this week and then continue over a few weeks. I'm expecting to find issues, come up with improvements as testing goes along, but I beelive this is complete enough for initial testing.
+
+It is very much built for our environment which has a Clearone Converge 880 DSPs and and Blackmagic ATEM Mini Swithcer, the swithcer is connected to Bitfocus Companion for control.  I use the Generic MQTT connection in companion to subscribe to the messgaes from this application and then Companion, using triggers, tells the ATEM to switch.  I have built a Clearone - MQTT bridge which can be found here - https://github.com/smaurer3/clearone_mqtt, this handles comms to the Clearone DSPs and also Companion can use the same MQTT connection to also control and get status of the Clearon DSPs.  Vision Director has been made for now to work directly with the Clearone MQTT bridge that I have developed.
+
+I would like expand this project so that the DSP connection is managed by plugins, and then different plugins can be developed for different DSPs.  I have access to a Yamah TF rack, so this would be the natural next plugin for me to develop, also a direct to Clearone Plugin as well.  I also want to make the Switcher device plugins - then I can develop a plugin to control the ATEM mini directly and also keep the MQTT controls as a plugin.
+**************************************************************************************************************************************************************
 # Vision Mixer Brain
 
 An open source, MQTT-driven automated camera switching engine for live production environments. Designed for churches, theatres, and live events using DSP gate status to intelligently drive camera selection.
@@ -49,7 +57,7 @@ clearone-mqtt-bridge  ──►  MQTT Broker  ◄──  Vision Mixer Brain
 
 - Python 3.10+
 - MQTT broker (Mosquitto recommended)
-- [clearone-mqtt-bridge](https://github.com/yourname/clearone-mqtt-bridge) for DSP gate status
+- [clearone-mqtt-bridge](https://github.com/smaurer3/clearone_mqtt) for DSP gate status
 
 ```bash
 pip install -r requirements.txt
