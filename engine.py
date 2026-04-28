@@ -136,7 +136,8 @@ class StateEngine:
                     "rule": rule_name,
                     "camera_input": rule["camera_input"],
                     "delay": delay,
-                    "state": "waiting"
+                    "state": "waiting",
+                    "triggered_by": changed_name
                 })
 
                 task = asyncio.ensure_future(
@@ -218,6 +219,7 @@ class StateEngine:
                 "type": "switch_fired",
                 "rule": rule["name"],
                 "camera_input": rule["camera_input"],
+                "triggered_by": triggered_by,
                 "timestamp": time.strftime("%H:%M:%S")
             }
             self.switch_log.insert(0, event)

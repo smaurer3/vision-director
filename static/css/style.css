@@ -330,6 +330,7 @@ html, body {
 }
 
 .pending-rule { font-weight: 600; font-size: 13px; flex: 1; }
+.pending-triggered-by { font-family: var(--font-mono); font-size: 11px; color: var(--pending); background: rgba(139,92,246,0.12); padding: 2px 7px; border-radius: 4px; }
 .pending-cam { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
 .pending-bar-wrap { width: 80px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
 .pending-bar { height: 100%; background: var(--pending); border-radius: 2px; transition: width 0.1s linear; }
@@ -363,6 +364,7 @@ html, body {
 
 .log-time { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .log-rule { font-weight: 600; font-size: 13px; flex: 1; }
+.log-triggered-by { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); background: var(--bg-input); padding: 2px 7px; border-radius: 4px; }
 .log-cam { font-family: var(--font-mono); font-size: 11px; background: var(--accent); color: white; padding: 2px 8px; border-radius: 4px; }
 
 /* ── TABLE ── */

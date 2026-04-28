@@ -228,6 +228,7 @@ function renderPendingList() {
         div.className = 'pending-item';
         div.innerHTML = `
             <div class="pending-rule">${item.rule}</div>
+            ${item.triggered_by ? `<div class="pending-triggered-by">${item.triggered_by}</div>` : ''}
             <div class="pending-cam">CAM ${item.camera_input}</div>
             <div class="pending-bar-wrap"><div class="pending-bar" id="pbar-${item.rule}" style="width:100%"></div></div>
             <div class="pending-state">WAITING</div>
@@ -249,6 +250,7 @@ function addLogItem(item, animate = true) {
     div.innerHTML = `
         <span class="log-time">${item.timestamp}</span>
         <span class="log-rule">${item.rule}</span>
+        ${item.triggered_by ? `<span class="log-triggered-by">${item.triggered_by}</span>` : ''}
         <span class="log-cam">CAM ${item.camera_input}</span>
     `;
     list.insertBefore(div, list.firstChild);
