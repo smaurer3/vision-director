@@ -50,6 +50,9 @@ loop: asyncio.AbstractEventLoop = None
 # Pending GHOLD queries: topic -> channel_id
 ghold_pending = {}
 
+# Discovered ClearOne device IDs (populated via #** DID on demand)
+discovered_devices: list = []
+
 def mqtt_publish(topic: str, payload: str):
     if mqtt_connected:
         mqtt_client.publish(topic, payload)
@@ -68,6 +71,8 @@ def on_mqtt_connect(client, userdata, flags, rc):
         client.subscribe("clearone/+/GATE/+")
         # Subscribe to GHOLD responses
         client.subscribe("clearone/+/GHOLD/+/state")
+        # Subscribe to DID (device ID) discovery responses
+        client.subscribe("clearone/+/DID/state")
         # Subscribe to control topics
         settings = get_settings()
         control_root = settings.get("control_topic", "vision-director")
@@ -142,6 +147,19 @@ def on_mqtt_message(client, userdata, msg):
                 )
         except ValueError:
             pass
+        return
+
+    # Handle DID (device ID) discovery response: clearone/{dev}/DID/state
+    if len(parts) == 4 and parts[2] == "DID" and parts[3] == "state":
+        dev_id = payload
+        if dev_id not in discovered_devices:
+            discovered_devices.append(dev_id)
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({
+                "type": "devices_list",
+                "devices": list(discovered_devices)
+            }), loop
+        )
         return
 
     # Handle GATE state: clearone/{dev}/GATE/{mic}
@@ -257,6 +275,7 @@ async def websocket_endpoint(ws: WebSocket):
         await ws.send_json({"type": "engine_status", "running": engine.running})
         await ws.send_json({"type": "all_states", "states": engine.states})
         await ws.send_json({"type": "switch_log", "log": engine.switch_log})
+        await ws.send_json({"type": "devices_list", "devices": list(discovered_devices)})
 
     try:
         while True:
@@ -343,3 +362,7 @@ async def handle_ws_message(ws: WebSocket, data: dict):
 
     elif msg_type == "get_log":
         await ws.send_json({"type": "switch_log", "log": engine.switch_log})
+
+    elif msg_type == "fetch_devices":
+        mqtt_publish("clearone/discover", "1")
+        await ws.send_json({"type": "devices_list", "devices": list(discovered_devices)})

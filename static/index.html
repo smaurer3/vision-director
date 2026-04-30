@@ -230,7 +230,7 @@
                             <thead><tr><th>Field</th><th>Description</th></tr></thead>
                             <tbody>
                                 <tr><td><strong>Variable Name</strong></td><td>The name used in logic rules and displayed throughout the UI. Use letters, numbers, and underscores — no spaces. Example: <span class="mono">lectern_mic</span></td></tr>
-                                <tr><td><strong>Device ID</strong></td><td>The identifier of the ClearOne unit. Matches the second segment of the MQTT topic. Example: <span class="mono">10</span> or <span class="mono">H2</span></td></tr>
+                                <tr><td><strong>Device ID</strong></td><td>The identifier of the ClearOne unit. Selected from a dropdown that is automatically populated when you first open the <em>DSP Channels</em> tab — Vision Director sends a <span class="mono">#** DID</span> command to the DSP and lists every unit that responds. If no devices appear, check that the MQTT bridge is running and connected.</td></tr>
                                 <tr><td><strong>Channel</strong></td><td>The microphone channel number on the DSP, typically 1–8.</td></tr>
                                 <tr><td><strong>GHOLD</strong></td><td>The <strong>Gate Hold</strong> time — how long the DSP keeps the gate open after audio stops. Queried automatically from the DSP on startup and when a channel is saved.</td></tr>
                                 <tr><td><strong>+ Hold (s)</strong></td><td>An <strong>Additional Hold</strong> time in seconds added on top of GHOLD. Use this to extend the debounce delay without changing DSP settings.</td></tr>
@@ -329,6 +329,7 @@
                             <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
                             <tbody>
                                 <tr><td><strong>MQTT dot is red / disconnected</strong></td><td>Verify the broker host and port in Settings. Confirm the broker is running and reachable from the Raspberry Pi. Check username and password if authentication is required.</td></tr>
+                                <tr><td><strong>Device ID dropdown shows "No devices found"</strong></td><td>The dropdown is populated by a <span class="mono">#** DID</span> query sent when you open the DSP Channels tab. If it stays empty, check that the MQTT bridge is running, the broker host in Settings is correct, and the bridge is subscribed to <span class="mono">clearone/discover</span>. Navigate away and back to the DSP Channels tab to retry.</td></tr>
                                 <tr><td><strong>Gate cards never light up</strong></td><td>Confirm the ClearOne MQTT bridge is running and connected to the same broker. Check that the Device ID on each DSP Channel matches what the bridge is publishing.</td></tr>
                                 <tr><td><strong>GHOLD shows — and never populates</strong></td><td>The DSP must be online and the bridge must be forwarding GHOLD responses. Use the <em>↻</em> button to retry. Check that the bridge is subscribed to <span class="mono">clearone/+/GHOLD/+/state</span>.</td></tr>
                                 <tr><td><strong>Rules never fire</strong></td><td>Check the engine button shows <em>RUNNING</em>. Confirm the rule is enabled (checkbox on the rule card). Watch the Monitor tab — if a pending trigger appears and then cancels, a Blocked By channel or recheck condition is failing.</td></tr>
@@ -356,7 +357,10 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Device ID</label>
-                        <input type="text" id="ch-device" placeholder="e.g. 10 or H2" oninput="onChannelFieldChange()">
+                        <select id="ch-device" onchange="onChannelFieldChange()">
+                            <option value="">Discovering devices…</option>
+                        </select>
+                        <span class="hint" id="ch-device-hint"></span>
                     </div>
                     <div class="form-group">
                         <label>Mic Channel</label>

@@ -8,6 +8,8 @@ let gateStates = {};
 let pendingTriggers = {};
 let pendingGhold = {}; // channel_id -> { gholdVal, additionalHold }
 let engineRunning = false;
+let discoveredDevices = [];
+let devicesFetched = false;
 
 // ── WebSocket ──
 function connectWS() {
@@ -105,6 +107,11 @@ function handleMessage(msg) {
         case 'switch_log':
             msg.log.forEach(item => addLogItem(item, false));
             break;
+
+        case 'devices_list':
+            discoveredDevices = msg.devices || [];
+            updateDeviceDropdown();
+            break;
     }
 }
 
@@ -130,6 +137,34 @@ function updateEngineBtn() {
     }
 }
 
+// ── Device ID dropdown ──
+function updateDeviceDropdown(preserveValue) {
+    const sel = document.getElementById('ch-device');
+    if (!sel) return;
+    const current = preserveValue !== undefined ? preserveValue : sel.value;
+    sel.innerHTML = '';
+    if (!discoveredDevices.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No devices found — open DSP Channels tab first';
+        sel.appendChild(opt);
+    } else {
+        discoveredDevices.forEach(id => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = `Device ${id}`;
+            sel.appendChild(opt);
+        });
+        if (current) sel.value = current;
+    }
+    const hint = document.getElementById('ch-device-hint');
+    if (hint) {
+        hint.textContent = discoveredDevices.length
+            ? `${discoveredDevices.length} device${discoveredDevices.length > 1 ? 's' : ''} found on DSP`
+            : '';
+    }
+}
+
 // ── Tab navigation ──
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -137,6 +172,11 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        // Fetch device IDs once when Channels tab first opened
+        if (btn.dataset.tab === 'channels' && !devicesFetched) {
+            devicesFetched = true;
+            send({ type: 'fetch_devices' });
+        }
     });
 });
 
@@ -324,7 +364,6 @@ let channelGholdVal = null;
 function openChannelModal(id = null) {
     channelGholdVal = null;
     document.getElementById('ch-id').value = '';
-    document.getElementById('ch-device').value = '';
     document.getElementById('ch-channel').value = '';
     document.getElementById('ch-name').value = '';
     document.getElementById('ch-hold').value = '0.5';
@@ -337,7 +376,11 @@ function openChannelModal(id = null) {
         const ch = channels.find(c => c.id === id);
         if (ch) {
             document.getElementById('ch-id').value = ch.id;
-            document.getElementById('ch-device').value = ch.device_id;
+            // Ensure existing device_id appears in dropdown even if not yet discovered
+            if (ch.device_id && !discoveredDevices.includes(ch.device_id)) {
+                discoveredDevices = [ch.device_id, ...discoveredDevices];
+            }
+            updateDeviceDropdown(ch.device_id);
             document.getElementById('ch-channel').value = ch.channel;
             document.getElementById('ch-name').value = ch.friendly_name;
             document.getElementById('ch-hold').value = ch.additional_hold;
@@ -347,6 +390,8 @@ function openChannelModal(id = null) {
                 updateTotalDelay();
             }
         }
+    } else {
+        updateDeviceDropdown();
     }
 
     document.getElementById('channel-modal').classList.add('open');
