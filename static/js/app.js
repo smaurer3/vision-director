@@ -152,7 +152,7 @@ function updateDeviceDropdown(preserveValue) {
         discoveredDevices.forEach(id => {
             const opt = document.createElement('option');
             opt.value = id;
-            opt.textContent = `Device ${id}`;
+            opt.textContent = id;
             sel.appendChild(opt);
         });
         if (current) sel.value = current;

@@ -151,7 +151,7 @@ def on_mqtt_message(client, userdata, msg):
 
     # Handle DID (device ID) discovery response: clearone/{dev}/DID/state
     if len(parts) == 4 and parts[2] == "DID" and parts[3] == "state":
-        dev_id = payload
+        dev_id = parts[1]  # device ID is in the topic, payload is an internal DID value
         if dev_id not in discovered_devices:
             discovered_devices.append(dev_id)
         asyncio.run_coroutine_threadsafe(
