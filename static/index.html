@@ -23,6 +23,7 @@
                     <button class="nav-btn" data-tab="channels">DSP Channels</button>
                     <button class="nav-btn" data-tab="logic">Logic</button>
                     <button class="nav-btn" data-tab="settings">Settings</button>
+                    <button class="nav-btn" data-tab="help">? Help</button>
                 </nav>
             </div>
             <div class="header-right">
@@ -192,6 +193,154 @@
                     </div>
                 </div>
             </div>
+            <!-- HELP TAB -->
+            <div class="tab-content" id="tab-help">
+
+                <!-- What is Vision Director? -->
+                <div class="panel">
+                    <div class="panel-header"><h2>What is Vision Director?</h2></div>
+                    <div style="padding: 16px 20px;">
+                        <p class="help-intro"><strong>Vision Director</strong> is an automated camera-switching engine for live production environments such as church services, conferences, and live events. It watches your <strong>DSP</strong> (Digital Signal Processor) for microphone activity and, based on rules you define, tells your video switcher which camera to cut to — automatically, with configurable delays so fast transients are ignored.</p>
+                        <p class="help-intro">The system connects everything via <strong>MQTT</strong>, a lightweight messaging protocol. Your ClearOne DSP publishes microphone gate events; Vision Director reads them, applies your rules, and publishes camera switch commands that Bitfocus Companion acts on to drive the ATEM switcher.</p>
+                    </div>
+                </div>
+
+                <!-- Quick Start -->
+                <div class="panel mt-16">
+                    <div class="panel-header"><h2>Quick Start</h2></div>
+                    <div style="padding: 16px 20px;">
+                        <ol class="help-steps">
+                            <li><strong>Configure MQTT</strong> — Go to the <em>Settings</em> tab and enter your MQTT broker host, port, and credentials, then click <em>Save &amp; Reconnect</em>. The dot in the header turns blue when connected.</li>
+                            <li><strong>Add DSP Channels</strong> — Go to the <em>DSP Channels</em> tab and click <em>+ Add Channel</em> for each microphone you want to track. Give each one a short <strong>Variable Name</strong> with no spaces — you'll use this name in rules.</li>
+                            <li><strong>Check GHOLD values</strong> — Vision Director automatically queries each channel's hold time from the DSP. Wait a moment after saving a channel and you'll see the GHOLD column populate. Adjust <em>Additional Hold</em> if you want extra delay on top of what the DSP provides.</li>
+                            <li><strong>Add Logic Rules</strong> — Go to the <em>Logic</em> tab and click <em>+ Add Rule</em>. Choose <em>Simple</em> mode, pick which channels trigger the rule, set the edge, optionally block the rule when other channels are active, and enter the camera input number to switch to.</li>
+                            <li><strong>Start the engine</strong> — Click the <em>ENGINE</em> button in the top-right until it shows <em>RUNNING</em>. The engine will now evaluate rules whenever a gate changes.</li>
+                            <li><strong>Monitor live activity</strong> — Switch to the <em>Monitor</em> tab to watch gate states, pending triggers with countdown bars, and the switch log in real time.</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <!-- DSP Channels -->
+                <div class="panel mt-16">
+                    <div class="panel-header"><h2>DSP Channels</h2></div>
+                    <div style="padding: 16px 20px;">
+                        <p class="help-p">Each <strong>DSP Channel</strong> maps one microphone input on a ClearOne Converge 880 unit to a friendly variable name used in rules. Vision Director subscribes to gate events on the MQTT topic <span class="mono">clearone/{device_id}/GATE/{channel}</span> for each configured channel.</p>
+                        <h3 class="help-h3">Field Reference</h3>
+                        <table class="data-table help-table">
+                            <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>Variable Name</strong></td><td>The name used in logic rules and displayed throughout the UI. Use letters, numbers, and underscores — no spaces. Example: <span class="mono">lectern_mic</span></td></tr>
+                                <tr><td><strong>Device ID</strong></td><td>The identifier of the ClearOne unit. Matches the second segment of the MQTT topic. Example: <span class="mono">10</span> or <span class="mono">H2</span></td></tr>
+                                <tr><td><strong>Channel</strong></td><td>The microphone channel number on the DSP, typically 1–8.</td></tr>
+                                <tr><td><strong>GHOLD</strong></td><td>The <strong>Gate Hold</strong> time — how long the DSP keeps the gate open after audio stops. Queried automatically from the DSP on startup and when a channel is saved.</td></tr>
+                                <tr><td><strong>+ Hold (s)</strong></td><td>An <strong>Additional Hold</strong> time in seconds added on top of GHOLD. Use this to extend the debounce delay without changing DSP settings.</td></tr>
+                                <tr><td><strong>Total Delay</strong></td><td>GHOLD + Additional Hold. This is how long after a gate event the engine waits before checking conditions and firing a camera switch.</td></tr>
+                            </tbody>
+                        </table>
+                        <div class="help-tip"><strong>Tip:</strong> After saving a channel, Vision Director automatically queries the DSP for its GHOLD value over MQTT. If the GHOLD column shows <span class="mono">—</span>, use the <em>↻</em> refresh button next to that channel to request it again.</div>
+                    </div>
+                </div>
+
+                <!-- Logic Rules -->
+                <div class="panel mt-16">
+                    <div class="panel-header"><h2>Logic Rules</h2></div>
+                    <div style="padding: 16px 20px;">
+                        <p class="help-p">A <strong>Logic Rule</strong> tells the engine: "when this microphone activity happens, switch to this camera." Each rule has a name, a target camera input number, a priority, and a mode.</p>
+
+                        <h3 class="help-h3">Simple Mode</h3>
+                        <p class="help-p">Simple mode uses checkboxes rather than expressions — no coding knowledge required.</p>
+                        <table class="data-table help-table">
+                            <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>Trigger Channels</strong></td><td>Any checked channel will start this rule's timer when its gate changes on the selected edge. The delay used is the Total Delay of the specific channel that changed.</td></tr>
+                                <tr><td><strong>Edge</strong></td><td><strong>Rising</strong> — fires when a gate turns ON (microphone becomes active). <strong>Falling</strong> — fires when a gate turns OFF (microphone goes silent). Use Rising to switch TO a camera, Falling to switch AWAY.</td></tr>
+                                <tr><td><strong>Blocked By</strong></td><td>If any checked channel is ON when the timer expires, the switch is cancelled. Use this to prevent a rule firing while a higher-priority mic is active — e.g. block <em>Audience</em> if <em>Lectern</em> is on.</td></tr>
+                                <tr><td><strong>Camera Input</strong></td><td>The camera number published to the MQTT camera switch topic when the rule fires. Matches the input number on your ATEM switcher.</td></tr>
+                                <tr><td><strong>Priority</strong></td><td>Higher numbers are evaluated first. When multiple rules could fire simultaneously, the highest priority rule wins.</td></tr>
+                            </tbody>
+                        </table>
+
+                        <h3 class="help-h3">Advanced Mode</h3>
+                        <p class="help-p">Advanced mode lets you write boolean expressions using variable names directly, giving you full control over complex logic.</p>
+                        <table class="data-table help-table">
+                            <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>Trigger Expression</strong></td><td>Evaluated on every gate change. If true, the delay timer starts. Example: <span class="mono">(audience1 || audience2) &amp;&amp; !lectern</span></td></tr>
+                                <tr><td><strong>Condition Expression</strong></td><td>Optional. Evaluated after the delay. If false, the switch is cancelled. Leave blank to recheck the trigger expression instead.</td></tr>
+                                <tr><td><strong>Edge</strong></td><td>Same as Simple mode — Rising or Falling selects which type of gate change starts the timer.</td></tr>
+                            </tbody>
+                        </table>
+                        <h3 class="help-h3">Expression Operators</h3>
+                        <ul class="help-list">
+                            <li><strong>&amp;&amp;</strong> — AND. Both sides must be true.</li>
+                            <li><strong>||</strong> — OR. Either side can be true.</li>
+                            <li><strong>!</strong> — NOT. Inverts a value.</li>
+                            <li><strong>==</strong> / <strong>!=</strong> — Equals / Not equals. Compare to <span class="mono">1</span> (on) or <span class="mono">0</span> (off).</li>
+                        </ul>
+                        <div class="help-tip"><strong>Note:</strong> Variable names in expressions must exactly match the <strong>Variable Name</strong> set on each DSP Channel. Unknown variable names evaluate as <span class="mono">false</span> (off) rather than causing an error.</div>
+                    </div>
+                </div>
+
+                <!-- How the Timer Works -->
+                <div class="panel mt-16">
+                    <div class="panel-header"><h2>How the Delay Timer Works</h2></div>
+                    <div style="padding: 16px 20px;">
+                        <p class="help-p">Understanding the delay prevents unexpected behaviour during a live event.</p>
+                        <ol class="help-steps">
+                            <li><strong>Gate event received</strong> — A microphone gate turns ON or OFF. The engine checks which rules match the changed channel and edge direction.</li>
+                            <li><strong>Timer starts</strong> — For each matching rule, a countdown begins equal to the <strong>Total Delay</strong> of the channel that just changed. The pending trigger appears in the Monitor tab with a countdown bar.</li>
+                            <li><strong>Recheck at expiry</strong> — When the timer expires the engine rechecks conditions. For a Rising rule: the triggering channel must still be ON. For a Falling rule: it must still be OFF. Any Blocked By channels must all be OFF.</li>
+                            <li><strong>Switch fires (or cancels)</strong> — If all conditions pass, the camera switch command is published to MQTT and logged. If any condition fails, the trigger is silently cancelled.</li>
+                        </ol>
+                        <div class="help-tip"><strong>Tip:</strong> If a second gate event for the same rule arrives while a timer is running, the timer restarts from the beginning using the new channel's delay. This prevents rapid mic toggling from firing erratic cuts.</div>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="panel mt-16">
+                    <div class="panel-header"><h2>Settings</h2></div>
+                    <div style="padding: 16px 20px;">
+                        <h3 class="help-h3">MQTT Broker</h3>
+                        <table class="data-table help-table">
+                            <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>Broker Host</strong></td><td>IP address or hostname of your MQTT broker. Example: <span class="mono">192.168.1.1</span></td></tr>
+                                <tr><td><strong>Port</strong></td><td>MQTT port — almost always <span class="mono">1883</span> for unencrypted connections.</td></tr>
+                                <tr><td><strong>Username / Password</strong></td><td>Leave blank if your broker does not require authentication.</td></tr>
+                            </tbody>
+                        </table>
+                        <h3 class="help-h3">Topics</h3>
+                        <table class="data-table help-table">
+                            <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>Camera Switch Topic</strong></td><td>Vision Director publishes the camera input number to this topic when a rule fires. Bitfocus Companion should be subscribed here. Default: <span class="mono">camera/switch</span></td></tr>
+                                <tr><td><strong>Control Topic Root</strong></td><td>The root topic for remote control. Vision Director subscribes to <span class="mono">{root}/engine/set</span> (start/stop) and <span class="mono">{root}/gates/refresh</span> (re-query gate states). Default: <span class="mono">vision-director</span></td></tr>
+                            </tbody>
+                        </table>
+                        <div class="help-tip"><strong>Note:</strong> Clicking <em>Save &amp; Reconnect</em> immediately drops and re-establishes the MQTT connection. Any pending triggers at that moment will be lost.</div>
+                    </div>
+                </div>
+
+                <!-- Troubleshooting -->
+                <div class="panel mt-16">
+                    <div class="panel-header"><h2>Troubleshooting</h2></div>
+                    <div style="padding: 16px 20px;">
+                        <table class="data-table help-table">
+                            <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>MQTT dot is red / disconnected</strong></td><td>Verify the broker host and port in Settings. Confirm the broker is running and reachable from the Raspberry Pi. Check username and password if authentication is required.</td></tr>
+                                <tr><td><strong>Gate cards never light up</strong></td><td>Confirm the ClearOne MQTT bridge is running and connected to the same broker. Check that the Device ID on each DSP Channel matches what the bridge is publishing.</td></tr>
+                                <tr><td><strong>GHOLD shows — and never populates</strong></td><td>The DSP must be online and the bridge must be forwarding GHOLD responses. Use the <em>↻</em> button to retry. Check that the bridge is subscribed to <span class="mono">clearone/+/GHOLD/+/state</span>.</td></tr>
+                                <tr><td><strong>Rules never fire</strong></td><td>Check the engine button shows <em>RUNNING</em>. Confirm the rule is enabled (checkbox on the rule card). Watch the Monitor tab — if a pending trigger appears and then cancels, a Blocked By channel or recheck condition is failing.</td></tr>
+                                <tr><td><strong>Camera cuts happen but the switcher doesn't respond</strong></td><td>Confirm the Camera Switch Topic in Settings matches the topic Bitfocus Companion is subscribed to. Check the Switch Log to verify the rule is firing with the correct camera number.</td></tr>
+                                <tr><td><strong>Cuts are too slow or too fast</strong></td><td>Adjust the <em>Additional Hold</em> on the DSP Channel. Increase it to add more debounce, decrease it for a faster response. Remember Total Delay = GHOLD + Additional Hold.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div><!-- end tab-help -->
+
         </main>
     </div>
 

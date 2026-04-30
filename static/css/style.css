@@ -782,6 +782,28 @@ html, body {
     font-style: italic;
 }
 
+/* ── HELP TAB ── */
+.help-intro { color: var(--text-dim); font-size: 14px; line-height: 1.7; margin-bottom: 12px; }
+.help-intro strong { color: var(--text); }
+.help-h3 { font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin: 24px 0 10px; }
+.help-p { color: var(--text-dim); font-size: 13px; line-height: 1.7; margin-bottom: 10px; }
+.help-p strong { color: var(--text); }
+.help-steps { list-style: none; counter-reset: steps; display: flex; flex-direction: column; gap: 14px; padding: 0; }
+.help-steps li { counter-increment: steps; display: flex; align-items: flex-start; gap: 14px; color: var(--text-dim); font-size: 13px; line-height: 1.7; }
+.help-steps li::before { content: counter(steps); flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+.help-steps li strong { color: var(--text); }
+.help-steps li em { color: var(--accent); font-style: normal; }
+.help-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; color: var(--text-dim); font-size: 13px; line-height: 1.7; }
+.help-list li { padding-left: 16px; position: relative; }
+.help-list li::before { content: '–'; position: absolute; left: 0; color: var(--accent); }
+.help-list li strong { color: var(--text); }
+.help-table { margin-top: 8px; }
+.help-table td { color: var(--text-dim); font-size: 13px; vertical-align: top; }
+.help-table td strong { color: var(--text); }
+.help-table td .mono { font-size: 12px; color: var(--text); background: var(--bg-input); padding: 1px 5px; border-radius: 3px; }
+.help-tip { margin-top: 14px; padding: 12px 16px; background: rgba(61,142,248,0.07); border-left: 3px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0; color: var(--text-dim); font-size: 13px; line-height: 1.6; }
+.help-tip strong { color: var(--text); }
+
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
