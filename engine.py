@@ -7,6 +7,7 @@ class StateEngine:
     def __init__(self, publish_callback: Callable, broadcast_callback: Callable, loop: asyncio.AbstractEventLoop):
         self.states: Dict[str, int] = {}
         self.pending_timers: Dict[str, asyncio.Task] = {}
+        self.pending_timer_info: Dict[str, dict] = {}  # rule_name -> {start, delay}
         self.publish_callback = publish_callback
         self.broadcast_callback = broadcast_callback
         self.loop = loop
@@ -102,6 +103,7 @@ class StateEngine:
                 if not trigger_active and rule_name in self.pending_timers:
                     self.pending_timers[rule_name].cancel()
                     del self.pending_timers[rule_name]
+                    self.pending_timer_info.pop(rule_name, None)
                     self._broadcast({
                         "type": "pending_trigger",
                         "rule": rule_name,
@@ -126,10 +128,19 @@ class StateEngine:
                 trigger_active = self.evaluate_expression(trigger_expr)
 
             if trigger_active:
+                delay = self.get_channel_delay(changed_name)
+
+                # If a timer is already running, only replace it if this trigger
+                # expires sooner — otherwise leave the earlier timer alone.
                 if rule_name in self.pending_timers:
+                    info = self.pending_timer_info.get(rule_name)
+                    if info:
+                        remaining = info['delay'] - (time.time() - info['start'])
+                        if delay >= remaining:
+                            continue  # existing timer fires sooner, don't touch it
                     self.pending_timers[rule_name].cancel()
 
-                delay = self.get_channel_delay(changed_name)
+                self.pending_timer_info[rule_name] = {'start': time.time(), 'delay': delay}
 
                 self._broadcast({
                     "type": "pending_trigger",
@@ -148,6 +159,7 @@ class StateEngine:
                 if rule_name in self.pending_timers:
                     self.pending_timers[rule_name].cancel()
                     del self.pending_timers[rule_name]
+                    self.pending_timer_info.pop(rule_name, None)
                     self._broadcast({
                         "type": "pending_trigger",
                         "rule": rule_name,
@@ -228,6 +240,7 @@ class StateEngine:
 
             if rule["name"] in self.pending_timers:
                 del self.pending_timers[rule["name"]]
+            self.pending_timer_info.pop(rule["name"], None)
 
         except asyncio.CancelledError:
             pass

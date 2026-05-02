@@ -292,7 +292,7 @@
                             <li><strong>Recheck at expiry</strong> — When the timer expires the engine rechecks conditions. For a Rising rule: the triggering channel must still be ON. For a Falling rule: it must still be OFF. Any Blocked By channels must all be OFF.</li>
                             <li><strong>Switch fires (or cancels)</strong> — If all conditions pass, the camera switch command is published to MQTT and logged. If any condition fails, the trigger is silently cancelled.</li>
                         </ol>
-                        <div class="help-tip"><strong>Tip:</strong> If a second gate event for the same rule arrives while a timer is running, the timer restarts from the beginning using the new channel's delay. This prevents rapid mic toggling from firing erratic cuts.</div>
+                        <div class="help-tip"><strong>Tip:</strong> Each trigger channel is independent. If Piano fires first (2 s delay) and Audience fires 1 s later (3 s delay), the engine keeps Piano's timer because it expires sooner — the switch still happens at Piano's original deadline. A new trigger only replaces the running timer if it would expire <em>earlier</em>.</div>
                     </div>
                 </div>
 
