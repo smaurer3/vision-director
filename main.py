@@ -189,6 +189,7 @@ def connect_mqtt():
     mqtt_client.on_connect = on_mqtt_connect
     mqtt_client.on_disconnect = on_mqtt_disconnect
     mqtt_client.on_message = on_mqtt_message
+    mqtt_client.reconnect_delay_set(min_delay=2, max_delay=30)
 
     if user:
         mqtt_client.username_pw_set(user, pwd)
@@ -198,7 +199,15 @@ def connect_mqtt():
         mqtt_client.loop_start()
         print(f"[MQTT] Connecting to {host}:{port}")
     except Exception as e:
-        print(f"[MQTT] Connection error: {e}")
+        print(f"[MQTT] Connection error: {e} — watchdog will retry")
+
+async def mqtt_watchdog():
+    """Retry MQTT connection if not connected — handles boot-time race with broker."""
+    while True:
+        await asyncio.sleep(15)
+        if not mqtt_connected:
+            print("[MQTT] Watchdog: not connected, attempting reconnect…")
+            reconnect_mqtt()
 
 def reconnect_mqtt():
     global mqtt_client, mqtt_connected
@@ -243,6 +252,9 @@ async def lifespan(app: FastAPI):
 
     # Connect MQTT
     connect_mqtt()
+
+    # Watchdog: retries connection every 15 s if not connected
+    asyncio.ensure_future(mqtt_watchdog())
 
     # Wait a moment then fetch GHOLDs and gate states
     await asyncio.sleep(2)
