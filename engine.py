@@ -84,6 +84,15 @@ class StateEngine:
         blocked_by = rule.get("blocked_by") or []
         return any(self.states.get(ch, 0) == 1 for ch in blocked_by)
 
+    def _clear_pending(self, rule_name: str):
+        # Drop both the task handle and the timing info so the next trigger
+        # can schedule cleanly. Without this, stale pending_timer_info from a
+        # cancelled-via-recheck timer leaves a negative `remaining`, which the
+        # earliest-expiring check in evaluate_rules treats as still-pending and
+        # silently drops the new trigger.
+        self.pending_timers.pop(rule_name, None)
+        self.pending_timer_info.pop(rule_name, None)
+
     async def evaluate_rules(self, changed_name: str, rising: bool = True):
         for rule in sorted(self.rules, key=lambda r: -r.get("priority", 0)):
             rule_name = rule["name"]
@@ -184,11 +193,13 @@ class StateEngine:
                 # For falling — triggering channel must now be OFF
                 if trigger_edge == "rising" and not current_state:
                     print(f"[Engine] Cancelled — {triggered_by} no longer on")
+                    self._clear_pending(rule["name"])
                     self._broadcast({"type": "pending_trigger", "rule": rule["name"],
                                      "camera_input": rule["camera_input"], "delay": 0, "state": "cancelled_recheck"})
                     return
                 if trigger_edge == "falling" and current_state:
                     print(f"[Engine] Cancelled — {triggered_by} still on")
+                    self._clear_pending(rule["name"])
                     self._broadcast({"type": "pending_trigger", "rule": rule["name"],
                                      "camera_input": rule["camera_input"], "delay": 0, "state": "cancelled_recheck"})
                     return
@@ -197,6 +208,7 @@ class StateEngine:
                 if self.is_blocked_simple(rule):
                     blocked = [ch for ch in (rule.get("blocked_by") or []) if self.states.get(ch, 0)]
                     print(f"[Engine] Cancelled — blocked by: {blocked}")
+                    self._clear_pending(rule["name"])
                     self._broadcast({"type": "pending_trigger", "rule": rule["name"],
                                      "camera_input": rule["camera_input"], "delay": 0, "state": "cancelled_blocked"})
                     return
@@ -207,6 +219,7 @@ class StateEngine:
                 if condition_expr:
                     if not self.evaluate_expression(condition_expr):
                         print(f"[Engine] Cancelled — condition failed")
+                        self._clear_pending(rule["name"])
                         self._broadcast({"type": "pending_trigger", "rule": rule["name"],
                                          "camera_input": rule["camera_input"], "delay": 0, "state": "cancelled_recheck"})
                         return
@@ -214,11 +227,13 @@ class StateEngine:
                     # No condition — check triggering channel state matches edge
                     if trigger_edge == "rising" and not current_state:
                         print(f"[Engine] Cancelled — {triggered_by} no longer on")
+                        self._clear_pending(rule["name"])
                         self._broadcast({"type": "pending_trigger", "rule": rule["name"],
                                          "camera_input": rule["camera_input"], "delay": 0, "state": "cancelled_recheck"})
                         return
                     if trigger_edge == "falling" and current_state:
                         print(f"[Engine] Cancelled — {triggered_by} still on")
+                        self._clear_pending(rule["name"])
                         self._broadcast({"type": "pending_trigger", "rule": rule["name"],
                                          "camera_input": rule["camera_input"], "delay": 0, "state": "cancelled_recheck"})
                         return
@@ -238,9 +253,7 @@ class StateEngine:
             self.switch_log = self.switch_log[:50]
             self._broadcast(event)
 
-            if rule["name"] in self.pending_timers:
-                del self.pending_timers[rule["name"]]
-            self.pending_timer_info.pop(rule["name"], None)
+            self._clear_pending(rule["name"])
 
         except asyncio.CancelledError:
             pass
