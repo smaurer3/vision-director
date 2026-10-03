@@ -50,6 +50,9 @@ loop: asyncio.AbstractEventLoop = None
 # Pending GHOLD queries: topic -> channel_id
 ghold_pending = {}
 
+# Discovered ClearOne device IDs (populated via #** DID on demand)
+discovered_devices: list = []
+
 def mqtt_publish(topic: str, payload: str):
     if mqtt_connected:
         mqtt_client.publish(topic, payload)
@@ -68,6 +71,14 @@ def on_mqtt_connect(client, userdata, flags, rc):
         client.subscribe("clearone/+/GATE/+")
         # Subscribe to GHOLD responses
         client.subscribe("clearone/+/GHOLD/+/state")
+        # Subscribe to DID (device ID) discovery responses
+        client.subscribe("clearone/+/DID/state")
+        # Subscribe to control topics
+        settings = get_settings()
+        control_root = settings.get("control_topic", "vision-director")
+        client.subscribe(f"{control_root}/engine/set")
+        client.subscribe(f"{control_root}/gates/refresh")
+        print(f"[MQTT] Subscribed to control topics under '{control_root}'")
         asyncio.run_coroutine_threadsafe(
             manager.broadcast({"type": "mqtt_status", "connected": True}), loop
         )
@@ -80,9 +91,36 @@ def on_mqtt_disconnect(client, userdata, rc):
         manager.broadcast({"type": "mqtt_status", "connected": False}), loop
     )
 
+def mqtt_refresh_gates():
+    """Publish clearone/refresh to trigger gate status refresh in bridge"""
+    mqtt_publish("clearone/refresh", "1")
+
 def on_mqtt_message(client, userdata, msg):
     topic = msg.topic
     payload = msg.payload.decode("utf-8").strip()
+
+    # Handle control topics
+    settings = get_settings()
+    control_root = settings.get("control_topic", "vision-director")
+
+    if topic == f"{control_root}/engine/set":
+        if engine:
+            if payload.lower() in ("1", "true", "on", "start"):
+                engine.running = True
+            elif payload.lower() in ("0", "false", "off", "stop"):
+                engine.running = False
+            elif payload.lower() == "toggle":
+                engine.running = not engine.running
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast({"type": "engine_status", "running": engine.running}), loop
+            )
+            print(f"[Control] Engine {'started' if engine.running else 'stopped'} via MQTT")
+        return
+
+    if topic == f"{control_root}/gates/refresh":
+        mqtt_refresh_gates()
+        print("[Control] Gate refresh requested via MQTT")
+        return
 
     # Handle GHOLD responses: clearone/{dev}/GHOLD/{ch}/state
     parts = topic.split("/")
@@ -109,6 +147,19 @@ def on_mqtt_message(client, userdata, msg):
                 )
         except ValueError:
             pass
+        return
+
+    # Handle DID (device ID) discovery response: clearone/{dev}/DID/state
+    if len(parts) == 4 and parts[2] == "DID" and parts[3] == "state":
+        dev_id = parts[1]  # device ID is in the topic, payload is an internal DID value
+        if dev_id not in discovered_devices:
+            discovered_devices.append(dev_id)
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({
+                "type": "devices_list",
+                "devices": list(discovered_devices)
+            }), loop
+        )
         return
 
     # Handle GATE state: clearone/{dev}/GATE/{mic}
@@ -138,6 +189,7 @@ def connect_mqtt():
     mqtt_client.on_connect = on_mqtt_connect
     mqtt_client.on_disconnect = on_mqtt_disconnect
     mqtt_client.on_message = on_mqtt_message
+    mqtt_client.reconnect_delay_set(min_delay=2, max_delay=30)
 
     if user:
         mqtt_client.username_pw_set(user, pwd)
@@ -147,7 +199,15 @@ def connect_mqtt():
         mqtt_client.loop_start()
         print(f"[MQTT] Connecting to {host}:{port}")
     except Exception as e:
-        print(f"[MQTT] Connection error: {e}")
+        print(f"[MQTT] Connection error: {e} — watchdog will retry")
+
+async def mqtt_watchdog():
+    """Retry MQTT connection if not connected — handles boot-time race with broker."""
+    while True:
+        await asyncio.sleep(15)
+        if not mqtt_connected:
+            print("[MQTT] Watchdog: not connected, attempting reconnect…")
+            reconnect_mqtt()
 
 def reconnect_mqtt():
     global mqtt_client, mqtt_connected
@@ -193,9 +253,13 @@ async def lifespan(app: FastAPI):
     # Connect MQTT
     connect_mqtt()
 
-    # Wait a moment then fetch GHOLDs
+    # Watchdog: retries connection every 15 s if not connected
+    asyncio.ensure_future(mqtt_watchdog())
+
+    # Wait a moment then fetch GHOLDs and gate states
     await asyncio.sleep(2)
     fetch_all_gholds()
+    mqtt_refresh_gates()
 
     yield
 
@@ -223,6 +287,7 @@ async def websocket_endpoint(ws: WebSocket):
         await ws.send_json({"type": "engine_status", "running": engine.running})
         await ws.send_json({"type": "all_states", "states": engine.states})
         await ws.send_json({"type": "switch_log", "log": engine.switch_log})
+        await ws.send_json({"type": "devices_list", "devices": list(discovered_devices)})
 
     try:
         while True:
@@ -258,6 +323,8 @@ async def handle_ws_message(ws: WebSocket, data: dict):
                 ghold_pending[pending_key] = c["id"]
                 break
         mqtt_publish(topic, " ")
+        # Also refresh gate status
+        mqtt_refresh_gates()
 
     elif msg_type == "delete_channel":
         delete_channel(data["id"])
@@ -302,5 +369,12 @@ async def handle_ws_message(ws: WebSocket, data: dict):
         engine.running = not engine.running
         await manager.broadcast({"type": "engine_status", "running": engine.running})
 
+    elif msg_type == "refresh_gates":
+        mqtt_refresh_gates()
+
     elif msg_type == "get_log":
         await ws.send_json({"type": "switch_log", "log": engine.switch_log})
+
+    elif msg_type == "fetch_devices":
+        mqtt_publish("clearone/discover", "1")
+        await ws.send_json({"type": "devices_list", "devices": list(discovered_devices)})
